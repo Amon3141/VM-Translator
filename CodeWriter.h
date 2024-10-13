@@ -5,6 +5,14 @@ using namespace std;
 #ifndef CODEWRITER_H
 #define CODEWRITER_H
 
+// TODOS
+// 1. complete label, goto, funciton-related translation functions
+// 2. support for directly input (multiple files)
+//  2-1. adjust to directly input
+//  2-2. search for Sys.init and related error handling
+//  2-3. remove getSPInitializeAssembly() if multi-file input,
+//       keep if single-file input
+
 class CodeWriter {
 public:
   CodeWriter(string fileName);
@@ -12,12 +20,19 @@ public:
   void writeArithmetic(string command);
   void writePush(string segment, int index);
   void writePop(string segment, int index);
+  void writeLabel(string label);
+  void writeGoto(string label);
+  void writeIf(string label);
+  void writeCall(string functionName, int numArgs);
+  void writeReturn();
+  void writeFunction(string functionName, int numLocals);
   void endWriting();
 
 private:
-  string fileName;
-  ofstream ofile;
-  int symbolRound;
+  ofstream ofile; // output asm file
+  string fileName; // current file that are being parsed
+  string functionName; // current function, NULL if at top-level
+  int symbolRound; // for making internal symbols unique (for eq, gt, lt)
   unordered_map<string, string> segToSymbol = {
     {"local", "LCL"}, {"argument", "ARG"}, {"this", "THIS"}, {"that", "THAT"}
   };
@@ -34,6 +49,12 @@ private:
   string getEqGtLtAssembly(string command);
   string getAndOrAssembly(string command);
   string getNotAssembly();
+
+  string getLabelAssembly(string label);
+  string getGotoAssembly(string label);
+  string getIfAssembly(string label);
+
+  void setFunctionName(string functionName);
 };
 
 #endif

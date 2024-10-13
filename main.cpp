@@ -26,6 +26,14 @@ int main() {
       writer.writePush(parser.arg1(), parser.arg2());
     } else if (commandType == "C_POP") {
       writer.writePop(parser.arg1(), parser.arg2());
+    } else if (commandType == "C_FUNCTION") {
+      writer.writeFunction(parser.arg1(), parser.arg2());
+    } else if (commandType == "C_LABEL") {
+      writer.writeLabel(parser.arg1());
+    } else if (commandType == "C_GOTO") {
+      writer.writeGoto(parser.arg1());
+    } else if (commandType == "C_IF") {
+      writer.writeIf(parser.arg1());
     } else {
       continue;
     }
@@ -37,3 +45,5 @@ int main() {
 
   return 0;
 }
+
+// g++ -std=c++20 -o program CodeWriter.cpp Parser.cpp main.cpp

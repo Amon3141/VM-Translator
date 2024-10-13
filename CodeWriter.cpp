@@ -10,6 +10,7 @@ using namespace std;
 // opens the file and prepare the output file
 CodeWriter::CodeWriter(string fileName) {
   setFileName(fileName);
+  this->functionName = "";
   ofile << getSPInitializeAssembly() << "\n";
 }
 
@@ -23,6 +24,11 @@ void CodeWriter::setFileName(string fileName) {
   cout << "output file: " << ofileName << endl;
   // !!! if ofile is currently open, should I close it?
   ofile.open(ofileName);
+}
+
+// set the current function's name
+void CodeWriter::setFunctionName(string functionName) {
+  this->functionName = functionName;
 }
 
 // @input command: arithmetic command ("add", "eq", etc.)
@@ -67,6 +73,39 @@ void CodeWriter::writePop(string segment, int index) {
     assembly = getPopSegmentAssembly(segment, index);
   }
   ofile << assembly << "\n";
+}
+
+// translate label command to assembly code
+void CodeWriter::writeLabel(string label) {
+  string assembly = getLabelAssembly(label);
+  ofile << assembly << "\n";
+}
+
+// translate goto command to assembly code
+void CodeWriter::writeGoto(string label) {
+  string assembly = getGotoAssembly(label);
+  ofile << assembly << "\n";
+}
+
+// translate if-goto command to assembly code
+void CodeWriter::writeIf(string label) {
+  string assembly = getIfAssembly(label);
+  ofile << assembly << "\n";
+}
+
+// translate (call f n) command to assembly code
+void CodeWriter::writeCall(string functionName, int numArgs) {
+  
+}
+
+// translate return command to assembly code
+void CodeWriter::writeReturn() {
+  
+}
+
+// translate (function f k) command to assembly code
+void CodeWriter::writeFunction(string functionName, int numLocals) {
+  
 }
 
 // close the streams
@@ -322,5 +361,51 @@ string CodeWriter::getNotAssembly() {
   "A=M\n"
   "A=A-1\n"
   "M=!M\n";
+  return assembly;
+}
+
+string CodeWriter::getLabelAssembly(string label) {
+  string assembly = "// label xxx\n";
+  assembly += "(" + this->fileName + ".";
+  if (!this->functionName.empty()) {
+    assembly += this->functionName + ".";
+  }
+  assembly += label + ")\n";
+  return assembly;
+}
+
+string CodeWriter::getGotoAssembly(string label) {
+  string assembly = "// goto xxx\n";
+  assembly += "@" + this->fileName + ".";
+  if (!this->functionName.empty()) {
+    assembly += this->functionName + ".";
+  }
+  assembly += label + "\n";
+  assembly += "0;JMP\n";
+  return assembly;
+}
+
+string CodeWriter::getIfAssembly(string label) {
+  string assembly = "//if-goto xxx \n";
+  assembly += 
+  "@SP\n"
+  "M=M-1\n"
+  "A=M\n"
+  "D=M\n"
+  "@R13\n"
+  "M=D\n"
+  "@0\n"
+  "D=A\n"
+  "@SP\n"
+  "A=M\n"
+  "M=D\n"
+  "@R13\n"
+  "D=M\n";
+  assembly += "@" + this->fileName + ".";
+  if (!this->functionName.empty()) {
+    assembly += this->functionName + ".";
+  }
+  assembly += label + "\n";
+  assembly += "D;JNE\n";
   return assembly;
 }
