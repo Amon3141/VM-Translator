@@ -17,6 +17,8 @@ bool Parser::hasNextCommand() {
 
 void Parser::advance() {
   getline(vmfile, currentCommand);
+  currentCommand = currentCommand.substr(0, currentCommand.find("//"));
+  currentCommand = removeLeadingSpaces(currentCommand);
 }
 
 string Parser::commandType() {
@@ -41,8 +43,9 @@ string Parser::commandType() {
 string Parser::arg1() {
   string arg1;
   string commandType = this->commandType();
-  if (commandType == "C_ARITHMETIC" || commandType == "SKIP") arg1 = currentCommand;
-  else {
+  if (commandType == "C_ARITHMETIC" || commandType == "SKIP") {
+    arg1 = currentCommand;
+  } else {
     string args = currentCommand.substr(currentCommand.find(" ")+1);
     arg1 = args.substr(0, args.find(" "));
   }
@@ -69,4 +72,11 @@ void Parser::endParsing() {
 // remove any white spaces (" ", \n, \t, etc.) from string
 void Parser::removeSpaces(string &str) {
   str.erase(remove_if(str.begin(), str.end(), ::isspace), str.end());
+}
+
+string Parser::removeLeadingSpaces(string str) {
+    str.erase(str.begin(), find_if(str.begin(), str.end(), [](unsigned char ch) {
+        return !isspace(ch);
+    }));
+    return str;
 }

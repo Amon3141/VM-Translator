@@ -6,7 +6,7 @@ using namespace std;
 #define CODEWRITER_H
 
 // TODOS
-// 1. complete label, goto, funciton-related translation functions
+// 1. complete label, goto, funciton-related translation functions ✅
 // 2. support for directly input (multiple files)
 //  2-1. adjust to directly input
 //  2-2. search for Sys.init and related error handling
@@ -15,7 +15,7 @@ using namespace std;
 
 class CodeWriter {
 public:
-  CodeWriter(string fileName);
+  CodeWriter(string fileName, bool needSysInit);
   void setFileName(string fileName);
   void writeArithmetic(string command);
   void writePush(string segment, int index);
@@ -37,7 +37,7 @@ private:
     {"local", "LCL"}, {"argument", "ARG"}, {"this", "THIS"}, {"that", "THAT"}
   };
   string getSPInitializeAssembly();
-  string getAfterTwoArgsAssembly();
+  string getDecrementSPAssembly();
   string getEndInfiniteLoopAssembly();
   string getPushConstantAssembly(int x);
   string getPushSegmentAssembly(string segment, int x);
@@ -53,7 +53,11 @@ private:
   string getLabelAssembly(string label);
   string getGotoAssembly(string label);
   string getIfAssembly(string label);
+  string getCallAssembly(string functionName, int numArgs);
+  string getReturnAssembly();
+  string getFunctionAssembly(string functionName, int numLocalas);
 
+  string getPushConstantInD();
   void setFunctionName(string functionName);
 };
 

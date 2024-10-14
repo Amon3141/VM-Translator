@@ -1,34 +1,31 @@
 #include <iostream>
 #include <fstream>
+#include <filesystem>
 
 #include "Parser.h"
 #include "CodeWriter.h"
 
 using namespace std;
+namespace fs = std::filesystem;
 
-// @param fileName: *.vm
-// opens the file and prepare the output file
-CodeWriter::CodeWriter(string fileName) {
-  setFileName(fileName);
+// @param outputFileName: asm_files/*.asm
+// open the output file stream
+CodeWriter::CodeWriter(string outputFileName, bool needSysInit) {
+  this->symbolRound = 0;
   this->functionName = "";
+  setFileName(fs::path(outputFileName).stem().string());
+  this->ofile.open(outputFileName);
   ofile << getSPInitializeAssembly() << "\n";
+  if (needSysInit) {
+    this->writeCall("Sys.init", 0);
+  }
 }
 
-// @input filaName: directry/filename.vm
+// @input fileName: * (of vm_file/*.vm)
 // set the current file name
 void CodeWriter::setFileName(string fileName) {
-  fileName = fileName.substr(fileName.find('/')+1);
-  fileName = fileName.substr(0, fileName.find("."));
   this->fileName = fileName;
-  string ofileName = "asm_files/" + fileName + ".asm";
-  cout << "output file: " << ofileName << endl;
-  // !!! if ofile is currently open, should I close it?
-  ofile.open(ofileName);
-}
-
-// set the current function's name
-void CodeWriter::setFunctionName(string functionName) {
-  this->functionName = functionName;
+  this->functionName = "";
 }
 
 // @input command: arithmetic command ("add", "eq", etc.)
@@ -46,7 +43,7 @@ void CodeWriter::writeArithmetic(string command) {
   } else if (command == "eq" || command == "gt" || command == "lt") {
     assembly = getEqGtLtAssembly(command);
   } else {
-    cout << "invalid arithmetic command" << endl;
+    cout << "invalid arithmetic command: " << command << endl;
   }
   ofile << assembly << "\n";
 }
@@ -95,17 +92,22 @@ void CodeWriter::writeIf(string label) {
 
 // translate (call f n) command to assembly code
 void CodeWriter::writeCall(string functionName, int numArgs) {
-  
+  string assembly = getCallAssembly(functionName, numArgs);
+  ofile << assembly << "\n";
 }
 
 // translate return command to assembly code
 void CodeWriter::writeReturn() {
-  
+  string assembly = getReturnAssembly();
+  ofile << assembly << "\n";
 }
 
 // translate (function f k) command to assembly code
 void CodeWriter::writeFunction(string functionName, int numLocals) {
-  
+  this->functionName = "";
+  string assembly = getFunctionAssembly(functionName, numLocals);
+  ofile << assembly << "\n";
+  this->functionName = functionName;
 }
 
 // close the streams
@@ -127,7 +129,7 @@ string CodeWriter::getSPInitializeAssembly() {
   return assembly;
 }
 
-string CodeWriter::getAfterTwoArgsAssembly() {
+string CodeWriter::getDecrementSPAssembly() {
   string assembly =
   "// SP = SP - 1\n"
   "@SP\n"
@@ -213,7 +215,7 @@ string CodeWriter::getPopSegmentAssembly(string segment, int x) {
   "@R13\n"
   "A=M\n"
   "M=D\n";
-  assembly += "\n" + getAfterTwoArgsAssembly();
+  assembly += "\n" + getDecrementSPAssembly();
   return assembly;
 }
 
@@ -238,7 +240,7 @@ string CodeWriter::getPopStaticAssembly(int x) {
   "D=M\n";
   assembly += "@" + this->fileName + "." + to_string(x) + "\n";
   assembly += "M=D\n";
-  assembly += "\n" + getAfterTwoArgsAssembly();
+  assembly += "\n" + getDecrementSPAssembly();
   return assembly;
 }
 
@@ -265,7 +267,7 @@ string CodeWriter::getAddSubAssembly(string command) {
   else return "";
 
   assembly += "M=D\n";
-  assembly += "\n" + getAfterTwoArgsAssembly();
+  assembly += "\n" + getDecrementSPAssembly();
   return assembly;
 }
 
@@ -322,7 +324,7 @@ string CodeWriter::getEqGtLtAssembly(string command) {
   "A=A-1\n"
   "A=A-1\n"
   "M=D\n";
-  assembly += "\n" + getAfterTwoArgsAssembly();
+  assembly += "\n" + getDecrementSPAssembly();
 
   symbolRound++;
   return assembly;
@@ -350,7 +352,7 @@ string CodeWriter::getAndOrAssembly(string command) {
   else if (command == "or") assembly += "D=D|M\n";
 
   assembly += "M=D\n";
-  assembly += "\n" + getAfterTwoArgsAssembly();
+  assembly += "\n" + getDecrementSPAssembly();
   return assembly;
 }
 
@@ -366,9 +368,10 @@ string CodeWriter::getNotAssembly() {
 
 string CodeWriter::getLabelAssembly(string label) {
   string assembly = "// label xxx\n";
-  assembly += "(" + this->fileName + ".";
   if (!this->functionName.empty()) {
-    assembly += this->functionName + ".";
+    assembly += "(" + this->fileName + "." + this->functionName + ".";
+  } else {
+    assembly += "(" + this->fileName + ".";
   }
   assembly += label + ")\n";
   return assembly;
@@ -376,9 +379,10 @@ string CodeWriter::getLabelAssembly(string label) {
 
 string CodeWriter::getGotoAssembly(string label) {
   string assembly = "// goto xxx\n";
-  assembly += "@" + this->fileName + ".";
   if (!this->functionName.empty()) {
-    assembly += this->functionName + ".";
+    assembly += "@" + this->fileName + "." + this->functionName + ".";
+  } else {
+    assembly += "@" + this->fileName + ".";
   }
   assembly += label + "\n";
   assembly += "0;JMP\n";
@@ -401,11 +405,173 @@ string CodeWriter::getIfAssembly(string label) {
   "M=D\n"
   "@R13\n"
   "D=M\n";
-  assembly += "@" + this->fileName + ".";
   if (!this->functionName.empty()) {
-    assembly += this->functionName + ".";
+    assembly += "@" + this->fileName + "." + this->functionName + ".";
+  } else {
+    assembly += "@" + this->fileName + ".";
   }
   assembly += label + "\n";
   assembly += "D;JNE\n";
   return assembly;
+}
+
+string CodeWriter::getFunctionAssembly(string functionName, int numLocal) {
+  // f = functionName, k = numLocal
+  string assembly = "// function f k\n";
+  assembly += "(" + functionName + ")\n";
+  assembly += "@" + to_string(numLocal) + "\n";
+  assembly += "D=A\n";
+  assembly +=
+  "@13\n"
+  "M=D\n";
+  assembly += "(" + functionName + ".init.START)\n";
+  assembly +=
+  "@13\n"
+  "D=M\n";
+  assembly += "@" + functionName + ".init.END\n";
+  assembly += "D;JLE\n";
+  assembly += "\n" + getPushConstantAssembly(0) + "\n";
+  assembly +=
+  "@13\n"
+  "M=M-1\n";
+  assembly += "@" + functionName + ".init.START\n";
+  assembly += "0;JMP\n";
+  assembly += "(" + functionName + ".init.END)\n";
+  return assembly;
+}
+
+string CodeWriter::getCallAssembly(string functionName, int numArgs) {
+  // f = functionName, n = numArgs
+  string assembly = "// call f n\n";
+  assembly += "@Return" + to_string(this->symbolRound) + "\n";
+  assembly += "D=A\n";
+  assembly += "\n" + getPushConstantInD() + "\n";
+  assembly +=
+  "@LCL\n"
+  "D=M\n";
+  assembly += "\n" + getPushConstantInD() + "\n";
+  assembly +=
+  "@ARG\n"
+  "D=M\n";
+  assembly += "\n" + getPushConstantInD() + "\n";
+  assembly +=
+  "@THIS\n"
+  "D=M\n";
+  assembly += "\n" + getPushConstantInD() + "\n";
+  assembly +=
+  "@THAT\n"
+  "D=M\n";
+  assembly += "\n" + getPushConstantInD() + "\n";
+  assembly +=
+  "// ARG = SP - n - 5\n"
+  "@SP\n"
+  "D=M\n";
+  assembly += "\n" + getPushConstantInD();
+  assembly += "\n" + getPushConstantAssembly(numArgs + 5);
+  assembly += "\n" + getAddSubAssembly("sub") + "\n";
+  assembly +=
+  "@SP\n"
+  "M=M-1\n"
+  "A=M\n"
+  "D=M\n"
+  "@ARG\n"
+  "M=D\n"
+  "\n"
+  "@0\n"
+  "D=A\n"
+  "@SP\n"
+  "A=M\n"
+  "M=D\n"
+  "\n"
+  "// LCL = SP\n"
+  "@SP\n"
+  "D=M\n"
+  "@LCL\n"
+  "M=D\n";
+  assembly += "\n@" + functionName + "\n";
+  assembly += "0;JMP\n";
+  assembly += "(Return" + to_string(this->symbolRound) + ")\n";
+  this->symbolRound++;
+  return assembly;
+}
+
+string CodeWriter::getReturnAssembly() {
+  string assembly = "// return\n";
+  assembly +=
+  "@LCL\n"
+  "D=M\n"
+  "@R14 // =FRAME\n"
+  "M=D\n";
+  assembly += "\n" + getPushConstantInD();
+  assembly += "\n" + getPushConstantAssembly(5);
+  assembly += "\n" + getAddSubAssembly("sub") + "\n";
+  assembly +=
+  "@SP\n"
+  "M=M-1\n"
+  "A=M\n"
+  "A=M\n"
+  "D=M\n"
+  "@R15 // =RET\n"
+  "M=D\n"
+  "@0\n"
+  "D=A\n"
+  "@SP\n"
+  "A=M\n"
+  "M=D\n";
+  assembly += "\n" + getPopSegmentAssembly("argument", 0) + "\n";
+  assembly +=
+  "@ARG\n"
+  "D=M+1\n"
+  "@SP\n"
+  "M=D\n"
+  "\n"
+  "@R14\n"
+  "M=M-1\n"
+  "A=M\n"
+  "D=M\n"
+  "@THAT\n"
+  "M=D\n"
+  "\n"
+  "@R14\n"
+  "M=M-1\n"
+  "A=M\n"
+  "D=M\n"
+  "@THIS\n"
+  "M=D\n"
+  "\n"
+  "@R14\n"
+  "M=M-1\n"
+  "A=M\n"
+  "D=M\n"
+  "@ARG\n"
+  "M=D\n"
+  "\n"
+  "@R14\n"
+  "M=M-1\n"
+  "A=M\n"
+  "D=M\n"
+  "@LCL\n"
+  "M=D\n"
+  "\n"
+  "@15\n"
+  "A=M // =RET\n"
+  "0;JMP\n";
+  return assembly;
+}
+
+
+string CodeWriter::getPushConstantInD() {
+  string assembly = "// push constant in D\n";
+  assembly +=
+  "@SP\n"
+  "A=M\n"
+  "M=D\n"
+  "@SP\n"
+  "M=M+1\n";
+  return assembly;
+}
+
+// set the current function's name
+void CodeWriter::setFunctionName(string functionName) {
+  this->functionName = functionName;
 }

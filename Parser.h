@@ -20,6 +20,7 @@ private:
   ifstream vmfile;
 
   void removeSpaces(string &str);
+  string removeLeadingSpaces(string str);
 };
 
 #endif
